@@ -835,6 +835,11 @@ class TCMallocImplementation : public MallocExtension {
       return true;
     }
 
+    if (strcmp(name, "tcmalloc.spinlock_total_delay_ns") == 0) {
+      *value = SpinLock::GetTotalDelayNanos();
+      return true;
+    }
+
     return false;
   }
 
@@ -1019,6 +1024,31 @@ class TCMallocImplementation : public MallocExtension {
       i.type = kPageHeapUnmappedType;
       i.total_bytes_free = (s << kPageShift) * small.returned_length[s - 1];
       v->push_back(i);
+    }
+  }
+  
+  virtual void SizeClasses(void* arg, SizeClassFunction func) {
+    TCMallocStats global_stats;
+    base::MallocSizeClass stats;
+    uint64_t class_count[kClassSizesMax];
+    ExtractStats(&global_stats, class_count, NULL, NULL);
+
+    for (int cl = 0; cl < Static::num_size_classes(); cl++) {
+      uint64_t central_objs = Static::central_cache()[cl].length();
+      uint64_t transfer_objs = Static::central_cache()[cl].tc_length();
+      uint64_t num_spans = Static::central_cache()[cl].spans();
+      uint64_t pages_per_span = Static::sizemap()->class_to_pages(cl);
+
+      stats.bytes_per_obj = Static::sizemap()->ByteSizeForClass(cl);
+      stats.pages_per_span = pages_per_span;
+      stats.num_spans = num_spans;
+      stats.num_central_objs = central_objs;
+      stats.num_transfer_objs = transfer_objs;
+      stats.num_thread_objs = class_count[cl] - central_objs - transfer_objs;
+      stats.free_bytes = class_count[cl] * Static::sizemap()->ByteSizeForClass(cl);
+      stats.alloc_bytes = (num_spans * pages_per_span) << kPageShift;
+
+      func(arg, &stats);
     }
   }
 };

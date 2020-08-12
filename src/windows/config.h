@@ -18,6 +18,13 @@
 /* used by tcmalloc.h */
 #define GPERFTOOLS_CONFIG_H_
 
+/* define this if you are linking tcmalloc statically and overriding the
+ * default allocators.
+ * For instructions on how to use this mode, see
+ * http://groups.google.com/group/google-perftools/browse_thread/thread/41cd3710af85e57b
+ */
+/* #undef WIN32_OVERRIDE_ALLOCATORS */
+
 /* Enable aggressive decommit by default */
 /* #undef ENABLE_AGGRESSIVE_DECOMMIT_BY_DEFAULT */
 
@@ -32,6 +39,9 @@
 
 /* Build sized deletion operators */
 /* #undef ENABLE_SIZED_DELETE */
+
+/* Define to 1 if compiler supports __builtin_expect */
+/* #undef HAVE_BUILTIN_EXPECT */
 
 /* Define to 1 if you have the <asm/ptrace.h> header file. */
 /* #undef HAVE_ASM_PTRACE_H */
@@ -101,6 +111,9 @@
 
 /* Define to 1 if you have the `geteuid' function. */
 /* #undef HAVE_GETEUID */
+
+/* Define to 1 if you have the `getpagesize' function. */
+#define HAVE_GETPAGESIZE 1   /* we define it in windows/port.cc */
 
 /* Define to 1 if you have the <glob.h> header file. */
 /* #undef HAVE_GLOB_H */
@@ -175,6 +188,9 @@
 
 /* Define to 1 if you have the <sys/cdefs.h> header file. */
 /* #undef HAVE_SYS_CDEFS_H */
+
+/* Define to 1 if you have the <sys/param.h> header file. */
+/* #undef HAVE_SYS_PARAM_H */
 
 /* Define to 1 if you have the <sys/prctl.h> header file. */
 /* #undef HAVE_SYS_PRCTL_H */
@@ -316,11 +332,32 @@
 /* the namespace where STL code like vector<> is defined */
 #define STL_NAMESPACE std
 
+/* Define 32K of internal pages size for tcmalloc */
+/* #undef TCMALLOC_32K_PAGES */
+
+/* Define 64K of internal pages size for tcmalloc */
+/* #undef TCMALLOC_64K_PAGES */
+
+/* Define to 1 to try to reduce the number of size classes. */
+/* #undef TCMALLOC_AGGRESSIVE_MERGE */
+
 /* Define 8 bytes of allocation alignment for tcmalloc */
 /* #undef TCMALLOC_ALIGN_8BYTES */
 
+/* Define to 0 to disable malloc override in libc. */
+#define TCMALLOC_ENABLE_LIBC_OVERRIDE 1
+
+/* Define max size of cached allocations for tcmalloc */
+/* #undef TCMALLOC_MAX_SIZE_KB */
+
 /* Define internal page size for tcmalloc as number of left bitshift */
 /* #undef TCMALLOC_PAGE_SIZE_SHIFT */
+
+/* Optimal transfer size between thread and central caches */
+#define TCMALLOC_TARGET_TRANSFER_KB 64
+
+/* A detail of the "blocks_to_move" loop of "SizeMap::Init" */
+/* #undef TCMALLOC_USE_UNCLAMPED_TRANSFER_SIZES */
 
 /* Version number of package */
 #define VERSION "2.7"
