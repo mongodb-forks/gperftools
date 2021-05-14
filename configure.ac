@@ -46,6 +46,11 @@ default_enable_heap_checker=yes
 default_enable_debugalloc=yes
 default_enable_minimal=no
 default_tcmalloc_alignment=16
+default_tcmalloc_mallinfo=yes
+default_tcmalloc_maxsize=256
+default_tcmalloc_target_transfer_kb=64
+default_tcmalloc_unclamped_transfer_sizes=no
+default_libc_override=yes
 need_nanosleep=yes   # Used later, to decide if to run ACX_NANOSLEEP
 case "$host" in
    *-mingw*) default_enable_minimal=yes; default_enable_debugalloc=no;
@@ -119,6 +124,49 @@ AC_ARG_WITH([tcmalloc-alignment],
                             [Set the tcmalloc allocation alignment to 8 or 16 bytes])],
             [],
             [with_tcmalloc_alignment=$default_tcmalloc_alignment])
+AC_ARG_WITH([tcmalloc-maxsize],
+            [AS_HELP_STRING([--with-tcmalloc-maxsize],
+                            [Set the tcmalloc internal max size for cached size allocations to 4K, 8K, 16K, 32K, 64K, 128K or 256K])],
+            [],
+            [with_tcmalloc_maxsize=$default_tcmalloc_maxsize])
+
+AC_ARG_ENABLE([tcmalloc-aggressive-merge],
+              [AS_HELP_STRING([--enable-tcmalloc-aggressive-merge],
+                              [Try harder to reduce the number of size classes])],
+              [],
+              [enable_tcmalloc_aggressive_merge=no])
+
+AS_IF([test "x$enable_tcmalloc_aggressive_merge" = "xyes"],
+      [AC_DEFINE([TCMALLOC_AGGRESSIVE_MERGE], 1,
+                 [Define to 1 to try to reduce the number of size classes.])],
+      [])
+
+AC_ARG_ENABLE([tcmalloc-target-transfer-kb],
+              AS_HELP_STRING([--enable-tcmalloc-target-transfer-kb],
+                             [Optimal transfer size (in KB) between thread and central caches.]),
+              [],
+              [enable_tcmalloc_target_transfer_kb=$default_tcmalloc_target_transfer_kb])
+AC_DEFINE_UNQUOTED(TCMALLOC_TARGET_TRANSFER_KB,
+                   [$enable_tcmalloc_target_transfer_kb],
+                   [Optimal transfer size between thread and central caches])
+
+AC_ARG_ENABLE([tcmalloc-unclamped-transfer-sizes],
+              AS_HELP_STRING([--enable-tcmalloc-unclamped-transfer-sizes],
+                             [A detail of the "blocks_to_move" loop of "SizeMap::Init"]),
+              [],
+              [enable_tcmalloc_unclamped_transfer_sizes=$default_tcmalloc_unclamped_transfer_sizes])
+AS_IF([test "x$enable_tcmalloc_unclamped_transfer_sizes" = "xyes"],
+      [AC_DEFINE_UNQUOTED(TCMALLOC_USE_UNCLAMPED_TRANSFER_SIZES, 1,
+                          [A detail of the "blocks_to_move" loop of "SizeMap::Init"])],
+      [])
+
+# MongoDB modification needed because we don't run configure everywhere we build.
+# We don't use mallinfo anyway. It's an obsolete int-based stats API.
+AC_ARG_ENABLE([tcmalloc-mallinfo],
+              [AS_HELP_STRING([--disable-tcmalloc-mallinfo],
+                              [Disable tc_mallinfo unconditionally])],
+              [],
+              [enable_tcmalloc_mallinfo=$default_tcmalloc_mallinfo])
 
 case "$with_tcmalloc_pagesize" in
   4)
@@ -150,6 +198,28 @@ case "$with_tcmalloc_alignment" in
   *)
        AC_MSG_WARN([${with_tcmalloc_alignment} bytes not supported, using default tcmalloc allocation alignment.])
 esac
+
+case "$with_tcmalloc_maxsize" in
+  4|8|16|32|64|128|256)
+       AC_DEFINE_UNQUOTED(TCMALLOC_MAX_SIZE_KB, [$with_tcmalloc_maxsize],
+          [Define max size of cached allocations for tcmalloc]);;
+  *)
+       AC_MSG_WARN([${with_tcmalloc_maxsize}K size not supported, using default tcmalloc max size.])
+       AC_DEFINE_UNQUOTED(TCMALLOC_MAX_SIZE_KB, [$default_tcmalloc_maxsize],
+          [Define max size of cached allocations for tcmalloc]);;
+esac
+
+AC_ARG_ENABLE([libc-override],
+              [AS_HELP_STRING([--disable-libc-override],
+                              [do not override malloc in libc])],
+              [],
+              [enable_libc_override="$default_libc_override"])
+
+AS_IF([test "x$enable_libc_override" = "xno"],
+      [AC_DEFINE([TCMALLOC_ENABLE_LIBC_OVERRIDE], 0,
+                 [Define to 0 to disable malloc override in libc.])],
+      [AC_DEFINE([TCMALLOC_ENABLE_LIBC_OVERRIDE], 1,
+                 [Define to 0 to disable malloc override in libc.])])
 
 # Checks for programs.
 AC_PROG_CXX
@@ -195,7 +265,9 @@ AC_MSG_RESULT($ac_cv___attribute__aligned_fn)
 AC_HEADER_STDC
 
 # TODO(csilvers): we could remove a lot when WITH_CPU_PROFILER etc is "no".
-AC_CHECK_TYPES([struct mallinfo],,, [#include <malloc.h>])
+AS_IF([test "x$enable_tcmalloc_mallinfo" = "xyes"],
+      [AC_CHECK_TYPES([struct mallinfo],,, [#include <malloc.h>])],
+      [])
 AC_CHECK_TYPES([Elf32_Versym],,, [#include <elf.h>])   # for vdso_support.h
 AC_CHECK_FUNCS(sbrk)            # for tcmalloc to get memory
 AC_CHECK_FUNCS(__sbrk)          # for tcmalloc to get memory
