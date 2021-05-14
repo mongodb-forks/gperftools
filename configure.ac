@@ -4,12 +4,12 @@
 # make sure we're interpreted by some minimal autoconf
 AC_PREREQ([2.59])
 
-AC_INIT([gperftools],[2.9.0],[gperftools@googlegroups.com])
+AC_INIT([gperftools],[2.9.1],[gperftools@googlegroups.com])
 # Update this value for every release!  (A:B:C will map to foo.so.(A-C).C.B)
 # http://www.gnu.org/software/libtool/manual/html_node/Updating-version-info.html
-TCMALLOC_SO_VERSION=9:8:5
-PROFILER_SO_VERSION=5:3:5
-TCMALLOC_AND_PROFILER_SO_VERSION=10:3:6
+TCMALLOC_SO_VERSION=9:9:5
+PROFILER_SO_VERSION=5:4:5
+TCMALLOC_AND_PROFILER_SO_VERSION=10:4:6
 
 AC_SUBST(TCMALLOC_SO_VERSION)
 AC_SUBST(PROFILER_SO_VERSION)
@@ -60,8 +60,13 @@ case "$host" in
    *-darwin*) default_enable_heap_checker=no;;
 esac
 
-# Currently only backtrace works on s390.
-AC_COMPILE_IFELSE([AC_LANG_PROGRAM(, [return __s390__])],
+# Currently only backtrace works on s390 and OSX.
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM(, [
+#if !defined(__s390__) && !defined(__APPLE__)
+#error not s390 and not osx
+#endif
+return 1
+])],
                   [default_enable_libunwind=no
                    default_enable_backtrace=yes],
                   [default_enable_libunwind=yes
@@ -488,7 +493,11 @@ AC_CACHE_CHECK([if target has _Unwind_Backtrace],
                [perftools_cv_have_unwind_backtrace],
                [AC_LANG_PUSH(C++)
                 AC_COMPILE_IFELSE([AC_LANG_PROGRAM(
-                    [[#include <unwind.h>]],
+                    [[#include <unwind.h>
+#if defined(__APPLE__)
+#error OSX _Unwind_Backtrace recurses back to malloc
+#endif
+]],
                     [[&_Unwind_Backtrace]])],
                  [perftools_cv_have_unwind_backtrace=yes],
                  [perftools_cv_have_unwind_backtrace=no])

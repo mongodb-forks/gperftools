@@ -163,6 +163,7 @@ using tcmalloc::Static;
 using tcmalloc::ThreadCache;
 
 DECLARE_double(tcmalloc_release_rate);
+DECLARE_int64(tcmalloc_heap_limit_mb);
 
 // Those common architectures are known to be safe w.r.t. aliasing function
 // with "extra" unused args to function with fewer arguments (e.g.
@@ -840,6 +841,12 @@ class TCMallocImplementation : public MallocExtension {
       return true;
     }
 
+    if (strcmp(name, "tcmalloc.heap_limit_mb") == 0) {
+      SpinLockHolder l(Static::pageheap_lock());
+      *value = FLAGS_tcmalloc_heap_limit_mb;
+      return true;
+    }
+
     return false;
   }
 
@@ -855,6 +862,12 @@ class TCMallocImplementation : public MallocExtension {
     if (strcmp(name, "tcmalloc.aggressive_memory_decommit") == 0) {
       SpinLockHolder l(Static::pageheap_lock());
       Static::pageheap()->SetAggressiveDecommit(value != 0);
+      return true;
+    }
+
+    if (strcmp(name, "tcmalloc.heap_limit_mb") == 0) {
+      SpinLockHolder l(Static::pageheap_lock());
+      FLAGS_tcmalloc_heap_limit_mb = value;
       return true;
     }
 
@@ -1459,6 +1472,21 @@ static ATTRIBUTE_NOINLINE void do_free_pages(Span* span, void* ptr) {
   Static::pageheap()->Delete(span);
 }
 
+#ifndef NDEBUG
+// note, with sized deletions we have no means to support win32
+// behavior where we detect "not ours" points and delegate them native
+// memory management. This is because nature of sized deletes
+// bypassing addr -> size class checks. So in this validation code we
+// also assume that sized delete is always used with "our" pointers.
+bool ValidateSizeHint(void* ptr, size_t size_hint) {
+  const PageID p = reinterpret_cast<uintptr_t>(ptr) >> kPageShift;
+  Span* span  = Static::pageheap()->GetDescriptor(p);
+  uint32 cl = 0;
+  Static::sizemap()->GetSizeClass(size_hint, &cl);
+  return (span->sizeclass == cl);
+}
+#endif
+
 // Helper for the object deletion (free, delete, etc.).  Inputs:
 //   ptr is object to be freed
 //   invalid_free_fn is a function that gets invoked on certain "bad frees"
@@ -1474,11 +1502,7 @@ void do_free_with_callback(void* ptr,
   const PageID p = reinterpret_cast<uintptr_t>(ptr) >> kPageShift;
   uint32 cl;
 
-#ifndef NO_TCMALLOC_SAMPLES
-  // we only pass size hint when ptr is not page aligned. Which
-  // implies that it must be very small object.
-  ASSERT(!use_hint || size_hint < kPageSize);
-#endif
+  ASSERT(!use_hint || ValidateSizeHint(ptr, size_hint));
 
   if (!use_hint || PREDICT_FALSE(!Static::sizemap()->GetSizeClass(size_hint, &cl))) {
     // if we're in sized delete, but size is too large, no need to

@@ -1268,6 +1268,23 @@ static int RunAllTests(int argc, char** argv) {
     std::stable_sort(v.begin(), v.end());
   }
 
+#ifdef ENABLE_SIZED_DELETE
+  {
+    fprintf(LOGSTREAM, "Testing large sized delete is not crashing\n");
+    // Large sized delete
+    // case. https://github.com/gperftools/gperftools/issues/1254
+    std::vector<char*> addresses;
+    constexpr int kSizedDepth = 1024;
+    addresses.reserve(kSizedDepth);
+    for (int i = 0; i < kSizedDepth; i++) {
+      addresses.push_back(noopt(new char[12686]));
+    }
+    for (int i = 0; i < kSizedDepth; i++) {
+      ::operator delete[](addresses[i], 12686);
+    }
+  }
+#endif
+
   // Test each of the memory-allocation functions once, just as a sanity-check
   fprintf(LOGSTREAM, "Sanity-testing all the memory allocation functions\n");
   {
@@ -1600,11 +1617,16 @@ static int RunAllTests(int argc, char** argv) {
   // Check that large allocations fail with NULL instead of crashing
 #ifndef DEBUGALLOCATION    // debug allocation takes forever for huge allocs
   fprintf(LOGSTREAM, "Testing out of memory\n");
+  size_t old_limit;
+  CHECK(MallocExtension::instance()->GetNumericProperty("tcmalloc.heap_limit_mb", &old_limit));
+  // Don't exercise more than 1 gig, no need to.
+  CHECK(MallocExtension::instance()->SetNumericProperty("tcmalloc.heap_limit_mb", 1 << 10));
   for (int s = 0; ; s += (10<<20)) {
     void* large_object = rnd.alloc(s);
     if (large_object == NULL) break;
     free(large_object);
   }
+  CHECK(MallocExtension::instance()->SetNumericProperty("tcmalloc.heap_limit_mb", old_limit));
 #endif
 
   TestHugeThreadCache();
